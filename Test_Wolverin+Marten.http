@@ -1,0 +1,17 @@
+@Test_Wolverin_Marten_HostAddress = http://localhost:5234
+
+GET {{Test_Wolverin_Marten_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+POST {{Test_Wolverin_Marten_HostAddress}}/orders
+Content-Type: application/json
+
+{
+	"orderId": "11111111-1111-1111-1111-111111111111",
+	"customerName": "Jan Kowalski",
+	"totalAmount": 199.99
+}
+
+###
