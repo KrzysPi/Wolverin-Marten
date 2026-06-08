@@ -13,6 +13,8 @@ public sealed class CreateOrderHandler
             Id = command.OrderId,
             CustomerName = command.CustomerName,
             TotalAmount = command.TotalAmount,
+            Sku = command.Sku,
+            Quantity = command.Quantity,
             CreatedAtUtc = DateTime.UtcNow
         };
 

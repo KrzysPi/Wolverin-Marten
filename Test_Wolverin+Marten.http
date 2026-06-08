@@ -11,7 +11,21 @@ Content-Type: application/json
 {
 	"orderId": "11111111-1111-1111-1111-111111111111",
 	"customerName": "Jan Kowalski",
-	"totalAmount": 199.99
+	"totalAmount": 199.99,
+	"sku": "SKU-1",
+	"quantity": 2
 }
+
+###
+
+POST {{Test_Wolverin_Marten_HostAddress}}/orders/11111111-1111-1111-1111-111111111111/confirm
+Content-Type: application/json
+
+{}
+
+###
+
+GET {{Test_Wolverin_Marten_HostAddress}}/inventory/SKU-1
+Accept: application/json
 
 ###

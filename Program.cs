@@ -1,5 +1,6 @@
 using Marten;
 using Test_Wolverin_Marten.Contracts;
+using Test_Wolverin_Marten.Domain;
 using Test_Wolverin_Marten.Infrastructure;
 using Wolverine;
 using Wolverine.ErrorHandling;
@@ -88,6 +89,8 @@ builder.Host.UseWolverine(opts =>
     //             → crash:  envelope zostaje w DB → Wolverine ponawia po restarcie
     opts.LocalQueueFor<CreateOrder>().UseDurableInbox();
     opts.LocalQueueFor<ConfirmOrder>().UseDurableInbox();
+    opts.LocalQueueFor<OrderConfirmed>().UseDurableInbox();
+    opts.LocalQueueFor<ReserveStock>().UseDurableInbox();
 
     // ── POLITYKA RETRY ──────────────────────────────────────────────
     // TransientException:
@@ -113,7 +116,7 @@ app.UseHttpsRedirection();
 //
 // PRZEPŁYW KROK PO KROKU:
 //   1. ASP.NET deserializuje JSON → CreateOrder command
-//   2. bus.PublishAsync(command):
+//   2. bus.SendAsync(command):
 //        a) Wolverine generuje Envelope (id, payload, metadata)
 //        b) INSERT do wolverine_incoming_envelopes w PostgreSQL
 //        c) notify worker: wiadomość w kolejce RAM
@@ -125,17 +128,17 @@ app.UseHttpsRedirection();
 //                                         obie operacje w JEDNEJ transakcji
 //   6. Order pojawia się w mt_doc_order (eventual consistency, ~kilka ms lokalnie)
 // ═══════════════════════════════════════════════════════════════════════════
-app.MapPost("/orders", async (CreateOrder command, IMessageBus bus, CancellationToken ct) =>
+app.MapPost("/orders", async (CreateOrder evnt, IMessageBus bus) =>
 {
-    await bus.PublishAsync(command);
-    return Results.Accepted($"/orders/{command.OrderId}");
+    await bus.SendAsync(evnt); // SendAsync = dokładnie 1 handler, czeka na jego wykonanie (czyli dla komend)
+    return Results.Accepted($"/orders/{evnt.OrderId}");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ENDPOINT: POST /orders/{id}/confirm
 //
 // PRZEPŁYW Z RETRY:
-//   1. PublishAsync → INSERT wolverine_incoming_envelopes
+//   1. SendAsync → INSERT wolverine_incoming_envelopes
 //   2. ConfirmOrderHandler.Handle():
 //
 //      Scenariusz SUKCES:
@@ -151,8 +154,14 @@ app.MapPost("/orders", async (CreateOrder command, IMessageBus bus, Cancellation
 // ═══════════════════════════════════════════════════════════════════════════
 app.MapPost("/orders/{orderId:guid}/confirm", async (Guid orderId, IMessageBus bus) =>
 {
-    await bus.PublishAsync(new ConfirmOrder(orderId));
+    await bus.SendAsync(new ConfirmOrder(orderId));
     return Results.Accepted();
+});
+
+app.MapGet("/inventory/{sku}", async (string sku, IQuerySession query, CancellationToken ct) =>
+{
+    var snapshot = await query.LoadAsync<InventorySnapshot>(sku, ct);
+    return snapshot is null ? Results.NotFound() : Results.Ok(snapshot);
 });
 
 app.Run();

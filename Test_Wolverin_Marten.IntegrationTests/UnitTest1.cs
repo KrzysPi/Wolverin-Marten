@@ -36,7 +36,7 @@ public class OrdersEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         using var client = _factory.CreateClient();
 
         var orderId = Guid.NewGuid();
-        var command = new CreateOrder(orderId, "Integration Test Customer", 120.50m);
+        var command = new CreateOrder(orderId, "Integration Test Customer", 120.50m, "SKU-TEST-1", 1);
 
         var response = await client.PostAsJsonAsync("/orders", command);
 
@@ -49,6 +49,8 @@ public class OrdersEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.NotNull(saved);
         Assert.Equal(command.CustomerName, saved!.CustomerName);
         Assert.Equal(command.TotalAmount, saved.TotalAmount);
+        Assert.Equal(command.Sku, saved.Sku);
+        Assert.Equal(command.Quantity, saved.Quantity);
         Assert.Equal(OrderStatus.Pending, saved.Status);
     }
 
@@ -72,7 +74,7 @@ public class OrdersEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
         // 1. Tworzymy zamówienie — order musi istnieć zanim go potwierdzimy.
         var orderId = Guid.NewGuid();
-        await client.PostAsJsonAsync("/orders", new CreateOrder(orderId, "Retry Customer", 99m));
+        await client.PostAsJsonAsync("/orders", new CreateOrder(orderId, "Retry Customer", 99m, "SKU-RETRY-1", 2));
 
         var created = await WaitForDocumentAsync<Order>(orderId, timeout: TimeSpan.FromSeconds(10));
         Assert.NotNull(created);
@@ -91,6 +93,17 @@ public class OrdersEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
         Assert.NotNull(confirmed);
         Assert.Equal(OrderStatus.Confirmed, confirmed!.Status);
+
+        // 4. Outbox -> OrderConfirmed -> ReserveStockHandler:
+        //    sprawdzamy, że snapshot magazynu został zaktualizowany asynchronicznie.
+        var stock = await WaitForDocumentAsync<InventorySnapshot>(
+            "SKU-RETRY-1",
+            predicate: s => s.Reserved == 2,
+            timeout: TimeSpan.FromSeconds(20));
+
+        Assert.NotNull(stock);
+        Assert.Equal(98, stock!.Available);
+        Assert.Equal(2, stock.Reserved);
     }
 
     // ════════════════════════════════════════════════════════════════════════
